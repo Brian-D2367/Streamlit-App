@@ -1,0 +1,5 @@
+venv/
+*.pyc
+__pycache__/
+.idea/  # if using PyCharm or similar IDEs
+.vscode/  # if using Visual Studio Code
