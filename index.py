@@ -3,6 +3,7 @@ import streamlit as st
 import snowflake.connector
 from snowflake.snowpark import Session
 from dotenv import load_dotenv
+import time
 
 # Load environment variables from .env file
 load_dotenv()
@@ -43,27 +44,34 @@ credentials = load_snowflake_credentials()
 # Try to connect to Snowflake on app load
 connection_successful, error_message = connect_to_snowflake(credentials)
 
-# Initialize session state variables for chat history, loading state, and first response flag
+# Initialize session state variables for chat history, loading state, and user query
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
 if 'loading' not in st.session_state:
     st.session_state.loading = False
 
-if 'first_response' not in st.session_state:
-    st.session_state.first_response = False
+if 'user_query' not in st.session_state:
+    st.session_state.user_query = ''  # Store the current input
 
-# Create Snowpark session if the connection was successful
-if connection_successful:
-    # Create and store Snowpark session
+# Display a warning for failed Snowflake connection, only for 10 seconds
+if not connection_successful:
+    with st.empty() as warning_placeholder:
+        st.error(f"Failed to connect to Snowflake: {error_message}")
+        st.warning("Please check your Snowflake credentials or environment settings.")
+        time.sleep(10)  # Display the warning for 10 seconds
+        warning_placeholder.empty()
+else:
+    # Proceed with the rest of the app logic
     session = Session.builder.configs(credentials).create()
     st.session_state.session = session
 
-    # Chat-like UI
     st.title("AI HelpDocs Chat")
 
+    # Inject custom CSS for styling
     st.markdown(
-        """<style>
+        """
+        <style>
         body {
             background-color: #121212;
             color: white;
@@ -97,7 +105,37 @@ if connection_successful:
             align-items: center;
             gap: 10px;
         }
-        </style>""",
+        .input-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .text-input {
+            flex-grow: 1;
+        }
+        div.stButton > button {
+            background-color: #1E88E5; 
+            color: white;             
+            border-radius: 8px;       
+            font-size: 16px;          
+            font-weight: bold;        
+            border: none;             
+            cursor: pointer;          
+        }
+        div.stButton > button:hover {
+            background-color: #1565C0; /* Darker background on hover */
+        }
+        .stHorizontalBlock{
+            display: flex !important;
+            flex-wrap: wrap;
+            -webkit-box-flex: 1;
+            flex-grow: 1;
+            -webkit-box-align: stretch;
+            align-items: end !important;
+            gap: 1rem;
+        }
+        </style>
+        """,
         unsafe_allow_html=True
     )
 
@@ -123,51 +161,53 @@ if connection_successful:
                 )
 
     # Function to handle submission
-    def submit(user_query):
-        # Add user message to chat history
+    def submit():
+        user_query = st.session_state.user_query.strip()  # Get the user query and strip whitespace
+
+        # Check for empty input
+        if not user_query:
+            st.warning("Please enter a question to search.")
+            return  # Exit without processing
+
         st.session_state.chat_history.append({"sender": "user", "content": user_query})
+        st.session_state.loading = True
 
-        # Generate response (simulate query to Snowflake)
-        with st.spinner("Generating response..."):
-            try:
-                # Query Snowflake for the response
+        # Display spinner below the input container
+        with spinner_container:
+            with st.spinner("Generating response..."):
+                # Simulate query to Snowflake
                 query = f"SELECT * FROM TABLE(DOCS_LLM('{user_query}'));"
-                response = session.sql(query).collect()
-                bot_response = response[0].RESPONSE if response else "Sorry, I couldn't find an answer."
-            except Exception as e:
-                bot_response = f"Error: {str(e)}"
+                try:
+                    response = session.sql(query).collect()
+                    bot_response = response[0].RESPONSE if response else "Sorry, no record found."
+                except Exception as e:
+                    bot_response = f"Error: {str(e)}"
 
-            # Add the bot response to the chat history
-            st.session_state.chat_history.append({"sender": "bot", "content": bot_response})
+                # Simulate slight delay for better UX (optional)
+                time.sleep(1)
 
-        # Set loading to False after the response is generated
+        st.session_state.chat_history.append({"sender": "bot", "content": bot_response})
+        st.session_state.user_query = ''  # Clear the input
         st.session_state.loading = False
-        st.session_state.first_response = True  # Flag to indicate that the first response is done
 
-    # Input box for user query with on_change handler
-    user_query = st.text_input(
-        "Type your question:",
-        value=st.session_state.get("user_query", ""),  # Use session state to retain the input value
-        placeholder="Ask me anything...",
-        key="user_query",  # key for text_input to maintain state
-    )
+    # Input box for user query with a send button
+    st.markdown("<div class='input-container'>", unsafe_allow_html=True)
+    user_input_col, button_col = st.columns([9, 1])
+    with user_input_col:
+        st.text_input(
+            "Type your question:",
+            key='user_query',
+            placeholder="Ask me anything...",
+            on_change=submit  # Call submit when Enter is pressed
+        )
+    with button_col:
+        if st.button("Send", on_click=submit):
+            pass
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    # Disable the send button while loading
-    send_button = st.button("Send", disabled=st.session_state.loading)
-
-    # Handle submission on button click if user query exists and button is pressed
-    if send_button and user_query:
-        st.session_state.loading = True  # Enable loading state
-        submit(user_query)  # Pass user query to submit function
-        st.rerun()  # Trigger a re-render to clear the input field
-
-    # Handle submission on text input change, but only when the user types and it's the first response
-    if st.session_state.get("user_query", "") and not st.session_state.first_response and not st.session_state.loading:
-        st.session_state.loading = True  # Enable loading state
-        submit(user_query)  # Pass user query to submit function
-        st.session_state.user_query = ""  # Clear user_query after the first response
-        st.rerun()  # Trigger a re-render to clear the input field
-
-else:
-    st.error(f"Failed to connect to Snowflake: {error_message}")
-    st.warning("Please check your Snowflake credentials or environment settings.")
+    # Spinner container
+    spinner_container = st.container()
+    if st.session_state.loading:
+        with spinner_container:
+            with st.spinner("Generating response..."):
+                time.sleep(1)  # Optional for UX feedback
