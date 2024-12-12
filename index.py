@@ -66,7 +66,7 @@ else:
     session = Session.builder.configs(credentials).create()
     st.session_state.session = session
 
-    st.title("AI HelpDocs Chat")
+    st.title("AI HelpDocs")
 
     # Inject custom CSS for styling
     st.markdown(
@@ -120,7 +120,13 @@ else:
             font-size: 16px;          
             font-weight: bold;        
             border: none;             
-            cursor: pointer;          
+            cursor: pointer;         
+            display: flex;           
+            align-items: center;
+            justify-content: center;
+        }
+        div.stButton > button img {
+            margin-right: 8px; /* Add space between icon and button text */
         }
         div.stButton > button:hover {
             background-color: #1565C0; /* Darker background on hover */
@@ -133,6 +139,10 @@ else:
             -webkit-box-align: stretch;
             align-items: end !important;
             gap: 1rem;
+        }
+        .stForm{
+            border: none;
+            padding: 0px;
         }
         </style>
         """,
@@ -190,20 +200,27 @@ else:
         st.session_state.user_query = ''  # Clear the input
         st.session_state.loading = False
 
-    # Input box for user query with a send button
-    st.markdown("<div class='input-container'>", unsafe_allow_html=True)
-    user_input_col, button_col = st.columns([9, 1])
-    with user_input_col:
-        st.text_input(
-            "Type your question:",
-            key='user_query',
-            placeholder="Ask me anything...",
-            on_change=submit  # Call submit when Enter is pressed
-        )
-    with button_col:
-        if st.button("Send", on_click=submit):
-            pass
-    st.markdown("</div>", unsafe_allow_html=True)
+    # Input box for user query inside a form, which is only submitted on pressing "Enter"
+    with st.form(key='chat_form', clear_on_submit=False):
+        # Create two columns: one for the text area and one for the submit button
+        input_col, button_col = st.columns([9, 1])
+
+        with input_col:
+            st.text_area(
+                "Type your question:",
+                key='user_query',
+                placeholder="Ask me anything...",
+                height=100,
+                label_visibility="collapsed"  # Hide the label for better styling
+            )
+        
+        with button_col:
+            submit_button = st.form_submit_button(
+                label="Send",
+                on_click=submit,
+                use_container_width=True  # This ensures the button is stretched to container width
+            )
+            
 
     # Spinner container
     spinner_container = st.container()
