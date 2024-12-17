@@ -144,6 +144,7 @@ else:
             border: none;
             padding: 0px;
         }
+         footer {visibility: hidden;}
         </style>
         """,
         unsafe_allow_html=True
